@@ -1,0 +1,1240 @@
+
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>随机组队 · 快乐集合</title>
+    <!-- 引入 Tailwind CSS -->
+    <link rel="stylesheet" href="assets/tailwind.min.css">
+    <!-- 引入 Font Awesome -->
+    <style>
+        
+        body {
+            font-family: 'Noto Sans SC', sans-serif;
+            background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+            min-height: 100vh;
+        }
+
+        .glass-panel {
+            background: rgba(255, 255, 255, 0.9);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.5);
+            box-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.15);
+        }
+
+        .card-enter {
+            animation: slideUp 0.5s ease-out forwards;
+            opacity: 0;
+            transform: translateY(20px);
+        }
+
+        @keyframes slideUp {
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .member-tag {
+            transition: all 0.3s ease;
+        }
+        .member-tag:hover {
+            transform: scale(1.05);
+        }
+
+        /* 自定义滚动条 */
+        ::-webkit-scrollbar {
+            width: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #f1f1f1; 
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #cbd5e1; 
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #94a3b8; 
+        }
+
+        /* 分组后使用整个视口，所有组在同一画面中展示。 */
+        body.results-view { height:100dvh; min-height:0; overflow:hidden; }
+        body.results-view > header, body.results-view > footer { display:none; }
+        body.results-view main { width:100%; max-width:none; height:100%; padding:16px; overflow:hidden; }
+        body.results-view main > .grid { display:block; height:100%; margin:0; }
+        body.results-view main > .grid > :first-child { display:none; }
+        body.results-view main > .grid > :last-child { height:100%; display:flex; flex-direction:column; gap:12px; }
+        body.results-view main > .grid > :last-child > :first-child { display:none; }
+        #result-toolbar { display:none; }
+        body.results-view #result-toolbar { display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:8px; flex:none; margin:0; }
+        #result-toolbar h2 { font-size:22px; font-weight:700; }
+        #result-toolbar p { color:#64748b; font-size:13px; }
+        .result-actions { display:flex; flex-wrap:wrap; gap:8px; }
+        .result-actions button { padding:8px 14px; border-radius:10px; background:white; border:1px solid #cbd5e1; font-size:14px; }
+        .result-actions .primary { background:#4f46e5; color:white; border-color:#4f46e5; }
+        body.results-view #results-area { flex:1; min-height:0; margin:0; }
+        body.results-view #groups-container { display:grid; height:100%; gap:var(--board-gap,12px); margin:0; }
+        body.results-view .result-card { min-width:0; min-height:0; padding:.65em; border-radius:.65em; animation:none; opacity:1; transform:none; font-size:var(--board-font,24px); }
+        .result-card h3 { font-size:.78em; font-weight:700; color:#4338ca; }
+        .result-card .group-heading { display:flex; align-items:center; justify-content:space-between; gap:.3em; border-bottom:1px solid #e2e8f0; padding-bottom:.3em; margin-bottom:.3em; }
+        .result-card .group-count { font-size:.55em; color:#64748b; white-space:nowrap; }
+        .result-members { display:flex; flex-direction:column; gap:.18em; }
+        .result-member { font-weight:600; line-height:1.3; overflow-wrap:anywhere; }
+        @media(max-width:600px) { body.results-view main { padding:8px; } #result-toolbar h2 { font-size:18px; } .result-actions button { padding:6px 9px; font-size:12px; } }
+        .result-member { cursor:grab; border-radius:.2em; touch-action:pan-y; }
+        .result-member:active { cursor:grabbing; }
+        .result-member.over-limit { color:#dc2626 !important; background:#fef2f2; }
+        .result-card.drag-target { outline:3px dashed #6366f1; outline-offset:-3px; background:#eef2ff; }
+        .result-member.dragging { opacity:.4; }
+        .group-limit { width:70px; padding:4px 6px; border:1px solid #cbd5e1; border-radius:6px; background:white; color:#334155; }
+        .result-member { display:flex; align-items:center; gap:.25em; }
+        .member-name { flex:1; min-width:0; overflow-wrap:anywhere; }
+        .delete-member { flex:none; padding:0 .25em; color:#94a3b8; font-size:.65em; cursor:pointer; border-radius:.25em; background:transparent; border:0; }
+        .delete-member:hover, .delete-member:focus-visible { color:#dc2626; background:#fee2e2; }
+        /* 人员池：多列紧凑排布，按可用空间调整字号。 */
+        #pool-panel { height:clamp(240px, 43vh, 520px); padding:16px; }
+        #pool-container { display:grid; gap:6px; overflow:hidden; padding:0; min-height:0; }
+        #pool-container .member-tag { min-width:0; min-height:0; margin:0; padding:.25em .4em; gap:.2em; font-size:var(--pool-font,16px); }
+        #pool-container .pool-name { min-width:0; overflow-wrap:anywhere; line-height:1.25; }
+        #pool-container .pool-delete { flex:none; color:#94a3b8; cursor:pointer; padding:0 .15em; line-height:1; }
+        #pool-container .pool-delete:hover { color:#dc2626; }
+        #pool-container .member-tag:hover { transform:none; background:#eef2ff; }
+        #name-input { height:130px; }
+        body:not(.results-view) main { padding-top:20px; padding-bottom:20px; }
+        .result-card { border-top:4px solid var(--group-accent,#6366f1); }
+        .result-card .group-heading h3 { color:var(--group-accent,#6366f1); }
+        .result-member { transition:background-color .2s, box-shadow .2s; }
+        .result-member:hover { background:#eef2ff; }
+        .result-member.reveal-member { animation:member-pop .55s cubic-bezier(.2,.8,.2,1) both; animation-delay:var(--reveal-delay,0s); }
+        .result-member.moved-member { animation:member-land .7s ease-out; }
+        @keyframes member-pop { from { opacity:0; transform:translateY(12px) scale(.88); } 65% { opacity:1; transform:translateY(-2px) scale(1.03); } to { opacity:1; transform:none; } }
+        @keyframes member-land { 0% { background:#c7d2fe; box-shadow:0 0 0 3px #818cf8; transform:scale(1.04); } 100% { background:transparent; box-shadow:0 0 0 0 transparent; transform:none; } }
+        @media(prefers-reduced-motion:reduce) { .result-member.reveal-member,.result-member.moved-member { animation:none; } }
+        /* 简洁的操作台：左侧设置，右侧名单。 */
+        body { background:linear-gradient(135deg,#eef2ff,#f0fdfa); }
+        body > footer, header a { display:none; }
+        body:not(.results-view) main { max-width:1400px; width:100%; padding:20px; }
+        body:not(.results-view) main > .grid { display:grid; grid-template-columns:340px minmax(0,1fr); gap:18px; margin:0; align-items:start; }
+        body:not(.results-view) main > .grid > div { display:contents; }
+        body:not(.results-view) main > .grid > div:first-child > div:first-child { grid-column:1; grid-row:1; padding:20px; }
+        body:not(.results-view) #pool-panel { grid-column:2; grid-row:1 / span 2; height:calc(100dvh - 108px); min-height:380px; max-height:850px; padding:22px; margin:0; }
+        body:not(.results-view) main > .grid > div:last-child > div:first-child { grid-column:1; grid-row:2; display:flex; flex-direction:column; align-items:stretch; gap:18px; padding:20px; margin:0; }
+        body:not(.results-view) main > .grid > div:last-child > div:first-child > div { flex-wrap:wrap; gap:12px; }
+        body:not(.results-view) #results-area { display:none; }
+        #pool-container { overflow-y:auto; align-content:start; }
+        #pool-container .member-tag { transition:background-color .2s; min-height:38px; padding:7px 10px; font-size:var(--pool-font,16px); }
+        #pool-container .pool-name { font-weight:600; color:#334155; }
+        #pool-panel > div:first-child { flex:none; }
+        #name-input { height:160px; }
+        #pool-panel h3 { letter-spacing:0; font-size:17px; color:#334155; }
+        .pool-hint { margin:0 0 16px; font-size:13px; color:#64748b; }
+        @media(max-width:800px) {
+            body:not(.results-view) main > .grid { grid-template-columns:minmax(0,1fr); }
+            body:not(.results-view) #pool-panel { grid-column:1; grid-row:3; height:55dvh; min-height:300px; }
+        }
+
+        :root { --activity-accent:#6755db; }
+        body { background:linear-gradient(145deg,#f7f5ff,#f1faf7); }
+        body > header { background:rgba(255,255,255,.92); box-shadow:none; border-bottom:1px solid #e9e5f2; }
+        .glass-panel { background:rgba(255,255,255,.96); box-shadow:0 8px 30px #352d5d08; border:1px solid #e9e5f2; }
+        .activity-switch { display:flex; gap:8px; margin:0 0 18px; align-items:center; flex-wrap:wrap; }
+        .activity-switch button { padding:10px 20px; border-radius:12px; background:white; border:1px solid #e6e1f1; color:#6b6383; font-weight:600; }
+        .activity-switch button.active { background:#6755db; color:white; border-color:#6755db; }
+        .activity-switch span { color:#8a839c; font-size:13px; margin-left:5px; }
+        body.results-view .activity-switch { display:none; }
+        #lottery-screen { position:fixed; inset:0; z-index:55; background:radial-gradient(ellipse at 50% 0,#ede7ff,transparent 65%),#f8f7fc; padding:22px 28px; display:flex; flex-direction:column; gap:16px; overflow:auto; }
+        #lottery-screen[hidden] { display:none; }
+        .lottery-head { display:flex; justify-content:space-between; align-items:center; gap:12px; flex-wrap:wrap; }
+        .lottery-head h2 { font-size:26px; font-weight:800; color:#302745; margin:0; }
+        .lottery-head p { font-size:13px; color:#8a819b; margin-top:3px; }
+        .lottery-button { padding:9px 16px; background:white; border:1px solid #e2dced; border-radius:12px; color:#514663; font-size:14px; }
+        .lottery-button:hover { background:#f1edff; }
+        .lottery-controls { display:flex; flex-wrap:wrap; align-items:center; gap:18px; padding:16px 20px; border:1px solid #e7e1f2; border-radius:18px; background:white; }
+        .lottery-controls label { display:flex; align-items:center; gap:8px; color:#655a76; font-size:14px; }
+        .lottery-controls input[type=number] { width:75px; border:1px solid #ddd6eb; border-radius:9px; padding:6px 9px; }
+        .lottery-controls input[type=checkbox] { accent-color:#6755db; width:17px; height:17px; }
+        #lottery-start { background:#6755db; color:white; border-color:#6755db; font-weight:700; min-width:130px; margin-left:auto; }
+        #lottery-stop { background:#ec9260; color:white; border-color:#ec9260; font-weight:700; min-width:130px; }
+        .lottery-button:disabled, .lottery-controls input:disabled { opacity:.5; cursor:default; }
+        .lottery-stage { flex:1; min-height:200px; display:flex; flex-direction:column; background:rgba(255,255,255,.75); border:1px solid #e7e1f2; border-radius:24px; padding:20px; }
+        #lottery-status { text-align:center; color:#8d7aab; font-size:13px; flex:none; padding-bottom:14px; }
+        #lottery-display { flex:1; min-height:160px; display:grid; align-content:center; gap:12px; grid-template-columns:repeat(auto-fit,minmax(110px,1fr)); overflow:auto; }
+        .lottery-person { padding:16px 12px; border-radius:16px; text-align:center; background:#f0ebff; color:#67539a; font-size:clamp(16px,2vw,28px); font-weight:700; overflow-wrap:anywhere; animation:lottery-pop .2s ease-out; }
+        .lottery-person.winner { background:linear-gradient(135deg,#fff7df,#ffedcd); color:#aa6b24; border:1px solid #f2d89a; animation:lottery-reveal .6s cubic-bezier(.2,.8,.2,1) both; }
+        .winner-rank { display:block; font-size:12px; font-weight:400; color:#b58b4c; margin-bottom:5px; }
+        .lottery-placeholder { grid-column:1/-1; text-align:center; color:#a099b1; padding:35px 12px; }
+        .lottery-placeholder strong { display:block; font-size:28px; color:#6d5d86; margin:8px 0; }
+        .lottery-records { display:flex; gap:8px; align-items:center; flex-wrap:wrap; max-height:110px; overflow:auto; padding:12px 16px; background:white; border:1px solid #e7e1f2; border-radius:16px; font-size:13px; color:#91859f; }
+        .winner-chip { color:#8a6b31; background:#fff5dc; padding:4px 10px; border-radius:8px; }
+        .lottery-note { text-align:center; color:#9d93ac; font-size:12px; }
+        @keyframes lottery-pop { from { opacity:.3; transform:scale(.95); } to { opacity:1; transform:none; } }
+        @keyframes lottery-reveal { from { opacity:0; transform:translateY(16px) scale(.8); } 65% { opacity:1; transform:scale(1.05); } to { opacity:1; transform:none; } }
+        @media(max-width:650px) { #lottery-screen { padding:12px; gap:10px; } .lottery-controls { gap:10px; padding:12px; } .lottery-stage { padding:12px; } .lottery-head h2 { font-size:22px; } .activity-switch span { width:100%; margin:0; } }
+        @media(prefers-reduced-motion:reduce) { .lottery-person,.lottery-person.winner { animation:none; } }
+        #result-toolbar .home-button { background:#4f46e5; color:white; border:2px solid #4338ca; font-weight:700; padding:10px 18px; }
+        .pool-clear { color:#c24153; font-size:13px; padding:5px 10px; border:1px solid #fecdd3; border-radius:8px; background:#fff1f2; }
+        .activity-switch button:disabled { opacity:.4; cursor:default; }
+        #pool-container .member-tag { justify-content:flex-start; gap:4px; }
+        #pool-container .pool-name, .result-member .member-name { flex:0 1 auto; max-width:calc(100% - 1.3em); min-width:0; overflow:hidden; white-space:nowrap; overflow-wrap:normal; }
+        .name-text { display:inline-block; white-space:nowrap; vertical-align:top; }
+        .marquee .name-text { animation:name-left var(--name-time,5s) ease-in-out infinite alternate; }
+        .result-member { justify-content:flex-start; }
+        .delete-member { padding:0 .15em; }
+        .lottery-person { overflow:hidden; }
+        .lottery-person.preview { padding:10px; animation:preview-up .075s linear; }
+        .lottery-person.preview.spotlight { background:#d8cdfb; color:#49327c; box-shadow:0 4px 15px #6755db22; }
+        .lottery-person.preview.spotlight .name-text { font-size:1.25em; font-weight:800; }
+        .lottery-name { display:block; overflow:hidden; white-space:nowrap; }
+        .winner-slot { height:1.5em; overflow:hidden; }
+        .winner-track { display:flex; flex-direction:column; animation:winner-lock .32s cubic-bezier(.15,.7,.2,1) forwards; }
+        .winner-track > span { height:1.5em; line-height:1.5em; flex:none; overflow:hidden; white-space:nowrap; }
+        .lottery-person.winner { animation:none; }
+        @keyframes name-left { 0%,15% { transform:translateX(0); } 85%,100% { transform:translateX(var(--name-shift,0px)); } }
+        @keyframes preview-up { from { transform:translateY(18px); opacity:.6; } to { transform:translateY(0); opacity:1; } }
+        @keyframes winner-lock { from { transform:translateY(0); } to { transform:translateY(-6em); } }
+        @media(prefers-reduced-motion:reduce) { .marquee .name-text,.lottery-person.preview { animation:none; } .winner-track { animation:none; transform:translateY(-6em); } }
+        /* 自然错落的玻璃姓名标签，保留足够的对比度。 */
+        #pool-panel { background:radial-gradient(ellipse at 8% 30%,#e8e6ff88,transparent 55%),radial-gradient(ellipse at 93% 80%,#dff7ee77,transparent 60%),rgba(255,255,255,.82); backdrop-filter:blur(18px); }
+        #pool-container { display:flex; flex-wrap:wrap; align-items:flex-start; align-content:flex-start; gap:12px 11px; padding:10px 8px 18px; overflow-y:auto; }
+        #pool-container .member-tag { flex:0 0 auto; width:max-content; max-width:min(220px,100%); min-height:40px; height:auto; margin:var(--chip-offset,0px) 0 0!important; padding:7px 12px; gap:4px; border:1px solid #ffffff; border-radius:15px; background:linear-gradient(135deg,#ffffffda,hsla(var(--chip-tone,255),65%,95%,.62)); box-shadow:inset 0 1px 0 #ffffff,0 3px 9px #5346790b,0 9px 18px #53467908; backdrop-filter:blur(12px) saturate(140%); transform:rotate(var(--chip-tilt,0deg)); transition:background .2s,box-shadow .2s,transform .2s; }
+        #pool-container .member-tag:hover, #pool-container .member-tag:focus-within { transform:translateY(-2px) rotate(0deg); background:linear-gradient(135deg,#ffffff,#f0ebffdd); box-shadow:inset 0 1px 0 white,0 6px 18px #6755db1c; z-index:1; }
+        #pool-container .pool-name { flex:0 1 auto; font-weight:600; max-width:calc(100% - 18px); color:#504764; }
+        #pool-container .pool-delete, .result-member .delete-member { opacity:0; visibility:hidden; transition:opacity .15s; }
+        #pool-container .member-tag:hover .pool-delete, #pool-container .member-tag:focus-within .pool-delete, .result-member:hover .delete-member, .result-member:focus-within .delete-member { opacity:1; visibility:visible; }
+        /* 用 opacity 隐藏按钮，键盘仍可聚焦，聚焦时显示。 */
+        #pool-container .pool-delete, .result-member .delete-member { visibility:visible; }
+        #pool-container .pool-delete:focus-visible, .delete-member:focus-visible { opacity:1; outline:2px solid #a78bfa; outline-offset:2px; }
+        @media(hover:none) { #pool-container .pool-delete, .result-member .delete-member { opacity:.7; } }
+        @media(prefers-reduced-motion:reduce) { #pool-container .member-tag { transition:none; transform:none; } }
+        /* 统一布局：操作区与人员池等高，桌面减少双层滚动。 */
+        body { background:radial-gradient(ellipse at 10% 0%,#eeeaff 0,transparent 45%),radial-gradient(ellipse at 95% 95%,#eaf8f2 0,transparent 50%),#f7f8fc; color:#35334b; }
+        body > header > div { height:64px; max-width:1600px; padding:0 28px; }
+        body > header h1 { font-size:21px; letter-spacing:-.3px; }
+        body > header .w-10 { width:36px; height:36px; border-radius:12px; box-shadow:0 5px 12px #6755db18; }
+        body:not(.results-view) main { max-width:1600px; padding:18px 28px 24px; }
+        .activity-switch { gap:8px; margin-bottom:18px; }
+        .activity-switch button { font-size:14px; padding:10px 18px; border-radius:13px; transition:background .2s,box-shadow .2s; }
+        .activity-switch button.active { box-shadow:0 5px 14px #6755db20; }
+        .activity-switch span { font-size:12px; color:#9690a5; }
+        body:not(.results-view) main > .grid { grid-template-columns:300px minmax(0,1fr); gap:16px; grid-template-rows:auto minmax(0,1fr); }
+        .glass-panel { border-radius:20px; border-color:#e7e4f0; box-shadow:0 6px 26px #51467005; }
+        body:not(.results-view) main > .grid > div:first-child > div:first-child { padding:20px; }
+        #name-input { height:128px; font-size:14px; line-height:1.7; padding:12px 14px 40px; border-radius:12px; background:#f9f9fc; }
+        #name-input::placeholder { color:#aaa6b8; }
+        #pool-panel .pool-heading { display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:10px; margin-bottom:6px; }
+        #pool-panel h3 { font-size:19px; font-weight:700; color:#403851; }
+        .pool-actions { display:flex; align-items:center; gap:8px; }
+        .pool-actions button { white-space:nowrap; font-size:12px; padding:6px 9px; border-radius:9px; }
+        #pool-panel .pool-hint { font-size:12px; color:#968da4; margin:0 0 14px; }
+        .pool-filter { display:flex; align-items:center; gap:10px; margin:0 0 12px; flex:none; }
+        .pool-filter input { background:#ffffffa6; border:1px solid #e7e1f0; border-radius:10px; width:180px; font-size:12px; padding:7px 11px; outline-color:#b2a6ec; }
+        #pool-overview { flex:1; font-size:12px; color:#8c819b; text-align:right; }
+        body:not(.results-view) #pool-panel { padding:22px; margin:0; max-height:none; }
+        #pool-container { gap:9px 10px; padding:8px 5px 16px; scrollbar-width:thin; scrollbar-color:#ded8ee transparent; }
+        #pool-container .member-tag { min-height:36px; padding:6px 10px; border-radius:12px; font-size:var(--pool-font,16px); }
+        #pool-container .pool-name { font-weight:500; }
+        .pool-no-match { width:100%; text-align:center; padding:40px 10px; color:#a39aad; font-size:14px; }
+        body:not(.results-view) main > .grid > div:last-child > div:first-child { padding:20px; gap:14px; }
+        .group-setup-title { margin:0; font-size:15px; font-weight:700; color:#5b506f; width:100%; }
+        .group-plan { font-size:12px; line-height:1.7; color:#84719b; background:#f4f0ff; padding:9px 12px; border-radius:10px; width:100%; }
+        .setup-options { display:flex!important; flex-direction:column; align-items:stretch!important; gap:12px!important; width:100%!important; }
+        .setup-options > div:first-child { justify-content:center; }
+        .setup-options > label { display:flex; align-items:center; justify-content:space-between; gap:10px; }
+        .setup-options > .h-8, .setup-options > label:last-child { display:none!important; }
+        .setup-launch { width:100%!important; padding:11px 12px!important; font-size:14px!important; border-radius:12px!important; box-shadow:0 5px 14px #6755db22!important; }
+        .group-limit { width:70px; padding:6px 9px; border-radius:9px; }
+        #count-badge { font-size:11px; }
+        .result-actions { gap:7px; align-items:center; }
+        #result-toolbar .home-button { padding:8px 13px; border-width:1px; border-radius:10px; }
+        body.results-view main { padding:16px; }
+        .result-actions button { font-size:13px; border-radius:10px; padding:8px 11px; }
+        #result-toolbar h2 { font-size:22px; color:#3e3452; }
+        #result-toolbar p { font-size:12px; }
+        .lottery-controls { box-shadow:0 5px 20px #6755db05; }
+        .lottery-head h2 { font-size:25px; }
+        button:focus-visible, input:focus-visible { outline:2px solid #a596e9; outline-offset:3px; }
+        @media(min-width:901px) and (min-height:720px) {
+            body:not(.results-view) { height:100dvh; overflow:hidden; }
+            body:not(.results-view) main { flex:1; min-height:0; display:flex; flex-direction:column; width:100%; }
+            body:not(.results-view) main > .grid { flex:1; min-height:0; }
+            body:not(.results-view) #pool-panel { height:100%; min-height:0; }
+            .activity-switch { flex:none; }
+        }
+        @media(max-width:1100px) { .activity-switch span { display:none; } }
+        @media(max-width:900px) {
+            body > header > div { padding:0 18px; height:58px; }
+            body > header h1 { font-size:18px; }
+            body:not(.results-view) main { padding:14px 16px 20px; }
+            body:not(.results-view) main > .grid { grid-template-columns:minmax(0,1fr); grid-template-rows:auto auto auto; }
+            body:not(.results-view) #pool-panel { grid-column:1; grid-row:3; height:56dvh; min-height:320px; padding:18px; }
+            .activity-switch button { font-size:12px; padding:9px 12px; }
+            .pool-filter input { width:140px; }
+        }
+        /* 结果卡片优先保证横向可读，避免组名竖排与姓名被裁掉。 */
+        body.results-view .result-card { padding:14px 16px; border-radius:16px; }
+        .result-card .group-heading { min-height:30px; gap:8px; padding:0 0 9px; margin:0 0 9px; }
+        .result-card .group-heading h3 { font-size:clamp(13px,.62em,20px); line-height:1.3; white-space:nowrap; min-width:max-content; }
+        .result-card .group-count { font-size:12px; flex:none; }
+        .result-card .result-members { gap:5px; }
+        .result-card .result-member { line-height:1.35; padding:3px 0; gap:4px; }
+        .result-card .member-name { flex:0 1 auto; max-width:calc(100% - 24px); font-weight:600; }
+        .result-card .delete-member { font-size:16px; width:20px; padding:0; }
+        @media(max-width:650px) { body.results-view .result-card { padding:8px; border-radius:10px; } .result-card .group-heading { gap:3px; } .result-card .group-count { font-size:10px; } }
+        :root { --ui-accent:#6755db; --ui-soft:#f1edff; --ui-page:#f7f6fc; --member-duration:.55s; --winner-duration:.32s; --preview-duration:.075s; }
+        body { background:radial-gradient(ellipse at 10% 0%,var(--ui-soft),transparent 60%),var(--ui-page); }
+        .activity-switch button.active, #result-toolbar .home-button, #lottery-start, .result-actions .primary, .setup-launch, body > header .bg-indigo-600 { background:var(--ui-accent)!important; border-color:var(--ui-accent)!important; }
+        .setup-launch { background-image:none!important; }
+        #count-badge, .group-plan, .result-card.drag-target, .result-member:hover { background:var(--ui-soft)!important; }
+        #count-badge, .group-plan, .text-indigo-600 { color:var(--ui-accent)!important; }
+        #pool-panel { background:radial-gradient(ellipse at 8% 30%,var(--ui-soft),transparent 70%),#ffffffd9; }
+        #lottery-screen { background:radial-gradient(ellipse at 50% 0,var(--ui-soft),transparent 65%),var(--ui-page); }
+        .lottery-person.preview { background:var(--ui-soft); color:var(--ui-accent); animation-duration:var(--preview-duration); }
+        .lottery-person.preview.spotlight { background:var(--ui-soft); color:var(--ui-accent); box-shadow:0 0 0 2px var(--ui-accent); }
+        .result-member.reveal-member { animation-duration:var(--member-duration); }
+        .winner-track { animation-duration:var(--winner-duration); }
+        .theme-choice { width:36px; height:36px; border-radius:50%; border:3px solid white; outline:2px solid transparent; outline-offset:2px; }
+        .theme-choice[aria-pressed=true] { outline-color:var(--ui-accent); }
+        .home-fullscreen { color:var(--ui-accent); background:var(--ui-soft); border:1px solid #e1dceb; border-radius:10px; padding:7px 12px; font-size:13px; font-weight:600; white-space:nowrap; }
+        @media(max-width:600px) { body > header h1 { font-size:15px; } body > header > div { padding:0 10px; } .home-fullscreen { font-size:12px; padding:6px 8px; } }
+        .trash-open { color:var(--ui-accent); background:var(--ui-soft); border:1px solid #e3dced; }
+        #trash-count { display:inline-block; min-width:18px; font-size:11px; border-radius:20px; padding:0 4px; background:white; margin-left:3px; }
+        .activity-dialog { width:min(520px,calc(100vw - 24px)); max-height:85dvh; padding:22px; border:1px solid #e7e1f2; border-radius:20px; color:#403851; background:white; box-shadow:0 20px 70px #40385130; }
+        .activity-dialog::backdrop { background:#29213866; backdrop-filter:blur(4px); }
+        .dialog-heading { display:flex; align-items:center; justify-content:space-between; gap:10px; }
+        .dialog-heading h2 { font-size:20px; font-weight:700; margin:0; }
+        .dialog-heading button { font-size:25px; padding:0 8px; color:#a39aad; }
+        .dialog-note { font-size:12px; color:#998da5; margin:10px 0 16px; }
+        .trash-list { max-height:45dvh; overflow:auto; display:flex; flex-direction:column; gap:8px; }
+        .trash-item { display:flex; align-items:center; justify-content:space-between; padding:10px 12px; background:var(--ui-soft); border-radius:10px; gap:10px; }
+        .trash-item span { overflow-wrap:anywhere; }
+        .trash-item button,.dialog-footer button,.move-options button { padding:7px 12px; background:white; border:1px solid #e7e1f2; border-radius:9px; font-size:13px; white-space:nowrap; }
+        .dialog-footer { display:flex; justify-content:flex-end; gap:10px; margin-top:16px; }
+        .move-options { display:flex; flex-wrap:wrap; gap:8px; }
+        .move-options button { background:var(--ui-soft); color:var(--ui-accent); }
+        @media(max-width:650px) { .pool-actions { flex-wrap:wrap; } .pool-actions button { min-height:36px; } body > header .flex.items-center.gap-4 { gap:7px; } #pool-panel .member-tag { min-height:42px; } #pool-panel .pool-delete,.delete-member { min-width:24px; } #lottery-start,#lottery-stop { flex:1; margin-left:0; } .lottery-controls { gap:10px; } .lottery-head { align-items:flex-start; } .lottery-head .lottery-button { font-size:12px; } .result-actions { gap:5px; } .result-actions button { padding:7px; font-size:11px; } }
+    </style>
+</head>
+<body class="text-slate-800 flex flex-col">
+
+    <!-- 头部导航 -->
+    <header class="bg-white shadow-sm sticky top-0 z-50">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+            <div class="flex items-center gap-3">
+                <div class="w-10 h-10 bg-indigo-600 rounded-lg flex items-center justify-center text-white shadow-lg">
+                    <span aria-hidden="true">✳</span>
+                </div>
+                <h1 class="text-xl font-bold text-slate-800 tracking-tight">随机组队 · 快乐集合</h1>
+            </div>
+            <div class="flex items-center gap-4">
+                <button class="home-fullscreen" data-fullscreen onclick="app.toggleFullscreen()" aria-label="进入全屏">⛶ 全屏显示</button>
+                <button onclick="app.toggleSettings()" class="p-2 text-slate-500 hover:text-indigo-600 transition-colors rounded-full hover:bg-slate-100" title="设置">
+                    <span aria-hidden="true">⚙</span>
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <!-- 主内容区 -->
+    <main class="flex-grow container mx-auto px-4 py-8 max-w-6xl">
+        
+        <nav class="activity-switch" aria-label="活动模式">
+            <button class="active" type="button">⌂ 首页 · 人员池</button>
+            <button id="resume-results" type="button" onclick="app.enterGrouping()">✦ 随机组队</button>
+            <button type="button" onclick="app.openLottery()">🎁 幸运抽奖</button>
+            <span>一份名单，两种快乐 · 先添加伙伴，再选择活动</span>
+        </nav>
+        <!-- 控制面板与输入区 -->
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-8 mb-8">
+            
+            <!-- 左侧：名单输入 -->
+            <div class="lg:col-span-1 space-y-6">
+                <div class="glass-panel rounded-2xl p-6">
+                    <div class="flex justify-between items-center mb-4">
+                        <h2 class="text-lg font-semibold flex items-center gap-2">
+                            <span aria-hidden="true">☷</span> 成员名单
+                        </h2>
+                        <span id="count-badge" class="bg-indigo-100 text-indigo-700 text-xs font-bold px-2.5 py-0.5 rounded-full">0 人</span>
+                    </div>
+                    
+                    <div class="relative mb-4">
+                        <textarea id="name-input" rows="8" 
+                            class="w-full p-4 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none resize-none text-sm leading-relaxed bg-slate-50 transition-all"
+                            placeholder="请输入成员姓名，每行一个&#10;例如：&#10;张三&#10;李四&#10;王五"></textarea>
+                        <div class="absolute bottom-3 right-3 flex gap-2">
+                            <button onclick="app.clearInput()" class="text-xs bg-white border border-slate-200 px-2 py-1 rounded hover:bg-slate-50 text-slate-500 shadow-sm">清空输入</button>
+                            <button onclick="app.loadDemoData()" class="text-xs bg-indigo-50 border border-indigo-100 px-2 py-1 rounded hover:bg-indigo-100 text-indigo-600 shadow-sm">示例</button>
+                        </div>
+                    </div>
+
+                    <div class="flex gap-3">
+                        <button onclick="app.addNames()" class="flex-1 bg-slate-800 hover:bg-slate-700 text-white py-2.5 rounded-xl font-medium transition-all shadow-md hover:shadow-lg active:scale-95 flex items-center justify-center gap-2">
+                            <span aria-hidden="true">＋</span> 添加成员
+                        </button>
+                    </div>
+                </div>
+
+                <!-- 已添加成员列表预览 -->
+                <div id="pool-panel" class="glass-panel rounded-2xl p-6 flex flex-col">
+                    <div class="pool-heading">
+                        <h3>伙伴集合区</h3>
+                        <div class="pool-actions">
+                            <button onclick="app.shufflePool()" class="text-indigo-600">↝ 换个排列</button>
+                            <button class="trash-open" onclick="app.openTrash()">♻ 回收站 <span id="trash-count">0</span></button>
+                            <button class="pool-clear" onclick="app.clearNames()">清空人员池</button>
+                        </div>
+                    </div>
+                    <p class="pool-hint">姓名上悬停可删除 · 长姓名自动向左滚动</p>
+                    <div class="pool-filter"><input id="pool-search" type="search" aria-label="查找人员" placeholder="查找一位伙伴…" oninput="app.filterPool()"><span id="pool-overview" aria-live="polite"></span></div>
+                    <div id="pool-container" class="flex-grow overflow-y-auto pr-2 space-y-2">
+                        <!-- 动态生成标签 -->
+                        <div class="text-center text-slate-400 mt-10 italic text-sm">暂无成员，请在上方添加</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 右侧：操作与结果 -->
+            <div class="lg:col-span-2 space-y-6">
+                
+                <!-- 操作栏 -->
+                <div class="glass-panel rounded-2xl p-6 flex flex-col sm:flex-row items-center justify-between gap-4">
+                    <h3 class="group-setup-title">✦ 组队设置</h3>
+                    <div class="setup-options flex items-center gap-4 w-full sm:w-auto">
+                        <div class="bg-slate-100 rounded-lg p-1 flex">
+                            <button onclick="app.setGroupSize(3)" id="btn-size-3" class="px-4 py-1.5 rounded-md text-sm font-medium bg-white shadow-sm text-indigo-600 transition-all">3人组</button>
+                            <button onclick="app.setGroupSize(2)" id="btn-size-2" class="px-4 py-1.5 rounded-md text-sm font-medium text-slate-500 hover:text-slate-700 transition-all">2人组</button>
+                            <button onclick="app.setGroupSize(4)" id="btn-size-4" class="px-4 py-1.5 rounded-md text-sm font-medium text-slate-500 hover:text-slate-700 transition-all">4人组</button>
+                        </div>
+                        <label class="text-sm text-slate-600">自定义人数
+                            <input id="custom-group-size" class="group-limit" type="number" min="1" step="1" value="3" onchange="app.setGroupSize(this.value)">
+                        </label>
+                        <div class="hidden sm:block h-8 w-px bg-slate-200"></div>
+                        <label class="flex items-center gap-2 cursor-pointer select-none">
+                            <input type="checkbox" id="allow-remainder" class="w-4 h-4 text-indigo-600 rounded border-slate-300 focus:ring-indigo-500" checked>
+                            <span class="text-sm text-slate-600">允许剩余人员</span>
+                        </label>
+                    </div>
+
+                    <div id="group-plan" class="group-plan" aria-live="polite"></div>
+                    <button onclick="app.generateGroups()" class="setup-launch w-full sm:w-auto bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-700 hover:to-violet-700 text-white px-8 py-3 rounded-xl font-bold shadow-lg shadow-indigo-200 transition-all hover:shadow-xl hover:-translate-y-0.5 active:scale-95 flex items-center justify-center gap-2">
+                        <span aria-hidden="true">✦</span> ✦ 开始随机组队
+                    </button>
+                </div>
+
+                <div id="result-toolbar">
+                    <div><h2>分组结果 · 全员总览</h2><p id="result-summary" aria-live="polite"></p></div>
+                    <div class="result-actions">
+                        <label class="text-sm text-slate-600">每组上限 <input id="result-group-size" class="group-limit" type="number" min="1" step="1" value="3" onchange="app.setGroupSize(this.value)"></label>
+                        <button class="home-button" onclick="app.editNames()">⌂ 返回首页 · 人员池</button>
+                        <button onclick="app.openLottery()">🎁 前往抽奖</button>
+                        <button onclick="app.exportResults()">导出结果</button>
+                        <button data-fullscreen onclick="app.toggleFullscreen()">⛶ 全屏显示</button>
+                        <button class="primary" onclick="app.generateGroups()">重新分组</button>
+                    </div>
+                </div>
+                <!-- 结果展示区 -->
+                <div id="results-area" class="space-y-6 min-h-[400px]">
+                    <!-- 初始状态 -->
+                    <div id="empty-state" class="h-full flex flex-col items-center justify-center text-slate-400 py-20 border-2 border-dashed border-slate-200 rounded-2xl bg-slate-50/50">
+                        <span aria-hidden="true">▦</span>
+                        <p class="text-lg font-medium">点击“✦ 开始随机组队”生成结果</p>
+                        <p class="text-sm mt-2">系统将自动从左侧名单中随机抽取</p>
+                    </div>
+                    
+                    <!-- 动态生成的组将在这里显示 -->
+                    <div id="groups-container" class="grid grid-cols-1 md:grid-cols-2 gap-6 hidden">
+                        <!-- Group Cards injected by JS -->
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- 页脚 -->
+    <footer class="bg-white border-t border-slate-200 py-6 mt-auto">
+        <div class="container mx-auto px-4 text-center text-slate-500 text-sm">
+            <p>&copy; 2026 随机分组助手. All rights reserved.</p>
+            <p class="mt-1 text-xs text-slate-400">数据仅保存在本地浏览器中，刷新页面后需重新输入或从历史记录恢复（暂未实现持久化存储以保护隐私）。</p>
+        </div>
+    </footer>
+
+    <section id="lottery-screen" hidden aria-label="幸运抽奖">
+        <header class="lottery-head"><div><h2>🎁 幸运时刻</h2><p id="lottery-meta">共用人员池，准备迎接好运</p></div><button class="lottery-button" onclick="app.closeLottery()">⌂ 返回首页 · 人员池</button></header>
+        <div class="lottery-controls">
+            <label for="lottery-count">本轮中奖人数 <input id="lottery-count" type="number" min="1" step="1" value="1" onchange="app.updateLottery()"></label>
+            <label><input id="lottery-filter" type="checkbox" checked onchange="app.updateLottery()">过滤已中奖人员</label>
+            <button id="lottery-reset" class="lottery-button" onclick="app.resetLottery()">清空中奖记录</button>
+            <button id="lottery-start" class="lottery-button" onclick="app.startLottery()">✦ 开始抽奖</button>
+            <button id="lottery-stop" class="lottery-button" onclick="app.stopLottery()" disabled>暂停 · 揭晓</button>
+        </div>
+        <div class="lottery-stage"><p id="lottery-status" role="status" aria-live="polite">设置中奖人数，点击开始</p><div id="lottery-display"><div class="lottery-placeholder">✧ ✦ ✧<strong>好运，会落在谁身上？</strong>滚动时随机展示约三分之一候选人，暂停后依次揭晓。</div></div></div>
+        <div id="lottery-records" class="lottery-records"></div>
+        <p class="lottery-note">同一轮不会重复中奖 · 不过滤时可跨轮重复中奖 · 记录仅保留在本次页面会话中，刷新后清空</p>
+    </section>
+    <dialog id="trash-dialog" class="activity-dialog">
+        <div class="dialog-heading"><h2>♻ 已删除人员</h2><button onclick="document.getElementById('trash-dialog').close()" aria-label="关闭回收站">×</button></div>
+        <p class="dialog-note">恢复后返回人员池；原分组仍在时，也会恢复到原组。回收站仅保留在当前页面，刷新后清空。</p>
+        <div id="trash-list" class="trash-list"></div>
+        <div class="dialog-footer"><button onclick="app.restoreAll()">恢复全部</button><button onclick="document.getElementById('trash-dialog').close()">完成</button></div>
+    </dialog>
+    <dialog id="move-dialog" class="activity-dialog"><div class="dialog-heading"><h2 id="move-title">移动到其他组</h2><button onclick="document.getElementById('move-dialog').close()" aria-label="关闭换组">×</button></div><p class="dialog-note">手机上点击姓名即可换组，也支持电脑拖动。</p><div id="move-options" class="move-options"></div></dialog>
+    <!-- 设置模态框 -->
+    <div id="settings-modal" class="fixed inset-0 bg-black/50 backdrop-blur-sm z-[60] hidden flex items-center justify-center opacity-0 transition-opacity duration-300">
+        <div class="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6 transform scale-95 transition-transform duration-300" id="settings-content">
+            <div class="flex justify-between items-center mb-6">
+                <h3 class="text-xl font-bold text-slate-800">应用设置</h3>
+                <button onclick="app.toggleSettings()" class="text-slate-400 hover:text-slate-600">
+                    <span aria-hidden="true">×</span>
+                </button>
+            </div>
+            
+            <div class="space-y-4">
+                <div>
+                    <label class="block text-sm font-medium text-slate-700 mb-1">动画速度</label>
+                    <select id="anim-speed" onchange="app.applyAnimationSpeed()" class="w-full border border-slate-300 rounded-lg p-2 text-sm focus:ring-2 focus:ring-indigo-500 outline-none">
+                        <option value="fast">快速</option>
+                        <option value="normal" selected>正常</option>
+                        <option value="slow">慢速</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-slate-700 mb-1">主题色</label>
+                    <div class="flex gap-3" role="group" aria-label="主题色">
+                        <button type="button" class="theme-choice" style="background:#6755db" data-theme="violet" aria-label="紫色主题" aria-pressed="true" onclick="app.setTheme('violet')"></button>
+                        <button type="button" class="theme-choice" style="background:#21856e" data-theme="mint" aria-label="绿色主题" aria-pressed="false" onclick="app.setTheme('mint')"></button>
+                        <button type="button" class="theme-choice" style="background:#cc476f" data-theme="rose" aria-label="玫红主题" aria-pressed="false" onclick="app.setTheme('rose')"></button>
+                    </div>
+                </div>
+                <div class="pt-4 border-t border-slate-100">
+                    <button onclick="app.exportResults()" class="w-full bg-slate-100 hover:bg-slate-200 text-slate-700 py-2 rounded-lg text-sm font-medium transition-colors">
+                        <span aria-hidden="true">↓</span> 导出当前结果为文本
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Toast 通知 -->
+    <div id="toast" class="fixed bottom-5 right-5 bg-slate-800 text-white px-6 py-3 rounded-lg shadow-lg transform translate-y-20 opacity-0 transition-all duration-300 z-[70] flex items-center gap-3">
+        <span aria-hidden="true">✓</span>
+        <span id="toast-msg">操作成功</span>
+    </div>
+
+    <script>
+        /**
+         * 随机分组应用逻辑
+         */
+        const app = (() => {
+            // 状态管理
+            let state = {
+                names: [], // 当前池子里的名字
+                groupSize: 3,
+                groups: [],
+                trash: [],
+                history: [] // 可以扩展历史记录功能
+            };
+
+            // DOM 元素缓存
+            const els = {
+                input: document.getElementById('name-input'),
+                poolContainer: document.getElementById('pool-container'),
+                countBadge: document.getElementById('count-badge'),
+                groupsContainer: document.getElementById('groups-container'),
+                emptyState: document.getElementById('empty-state'),
+                settingsModal: document.getElementById('settings-modal'),
+                settingsContent: document.getElementById('settings-content'),
+                toast: document.getElementById('toast'),
+                toastMsg: document.getElementById('toast-msg')
+            };
+
+            // 初始化
+            function init() {
+                renderPool();
+                setupEventListeners();
+            }
+
+            // 事件监听设置
+            function setupEventListeners() {
+                // 键盘快捷键 Ctrl+Enter 触发分组
+                document.addEventListener('keydown', (e) => {
+                    if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+                        generateGroups();
+                    }
+                });
+            }
+
+            // 添加名字
+            function addNames() {
+                const raw = els.input.value.trim();
+                if (!raw) {
+                    showToast('请输入至少一个名字', 'error');
+                    return;
+                }
+
+                // 支持换行、逗号、顿号分隔
+                const newNames = raw.split(/[\n,，、]/)
+                    .map(n => n.trim())
+                    .filter(n => n.length > 0);
+
+                if (newNames.length === 0) {
+                    showToast('未检测到有效名字', 'error');
+                    return;
+                }
+
+                // 去重合并
+                const uniqueNew = newNames.filter(n => !state.names.includes(n));
+                state.names = [...state.names, ...uniqueNew];
+                
+                els.input.value = ''; // 清空输入框
+                renderPool();
+                showToast(`成功添加 ${uniqueNew.length} 位成员`);
+            }
+
+            // 清空名字
+            function clearNames() {
+                if(confirm('确定清空人员池吗？全部人员会移入回收站，可恢复。')) {
+                    state.names.forEach((name,index) => putInTrash(name,index));
+                    state.names = [];
+                    state.groups = [];
+                    els.input.value = '';
+                    renderPool();
+                    // 重置结果区
+                    els.groupsContainer.innerHTML = '';
+                    els.groupsContainer.classList.add('hidden');
+                    els.emptyState.classList.remove('hidden');
+                    showToast('名单已清空');
+                }
+            }
+
+            // 加载示例数据
+            function loadDemoData() {
+                const demos = ["刘备", "关羽", "张飞", "诸葛亮", "赵云", "马超", "黄忠", "魏延", "庞统", "法正", "姜维", "马岱"];
+                state.names = [...demos];
+                renderPool();
+                showToast('已加载示例数据');
+            }
+
+            // 渲染池子
+            function renderPool() {
+                els.countBadge.textContent = `${state.names.length} 人`;
+                updatePlan();
+                document.getElementById('trash-count').textContent = state.trash.length;
+                document.getElementById('resume-results').disabled = state.names.length === 0;
+                
+                if (state.names.length === 0) {
+                    els.poolContainer.style.gridTemplateColumns = '1fr';
+                    els.poolContainer.style.gridTemplateRows = '1fr';
+                    document.getElementById('pool-overview').textContent = '等待伙伴加入';
+                    els.poolContainer.innerHTML = '<div class="text-center text-slate-400 mt-10 italic text-sm">暂无成员，请在上方添加</div>';
+                    return;
+                }
+
+                els.poolContainer.innerHTML = '';
+                state.names.forEach((name, index) => {
+                    const tag = document.createElement('div');
+                    tag.dataset.name = name;
+                    tag.className = 'member-tag flex justify-between items-center bg-white border border-slate-100 rounded-lg shadow-sm';
+                    const label = document.createElement('span');
+                    label.className = 'pool-name';
+                    setNameLabel(label, name);
+                    const button = document.createElement('button');
+                    button.className = 'pool-delete';
+                    button.textContent = '×';
+                    button.title = `删除 ${name}`;
+                    button.setAttribute('aria-label', `删除 ${name}`);
+                    button.addEventListener('click', () => removeName(index));
+                    tag.append(label, button);
+                    els.poolContainer.appendChild(tag);
+                });
+                filterPool();
+                fitPool();
+            }
+
+            function clearInput() { els.input.value=''; els.input.focus(); }
+            function updatePlan() {
+                const n=state.names.length, size=state.groupSize;
+                document.getElementById('group-plan').textContent = n ? `共 ${n} 人 · 预计 ${Math.ceil(n/size)} 组${n%size ? ` · 最后一组 ${n%size} 人` : ` · 每组 ${size} 人`}` : '先添加伙伴，再开始组队。';
+            }
+            function filterPool() {
+                const query=document.getElementById('pool-search').value.trim().toLowerCase();
+                let visible=0;
+                Array.from(els.poolContainer.children).forEach(tag => {
+                    if (!tag.dataset.name) return;
+                    const matches=tag.dataset.name.toLowerCase().includes(query);
+                    tag.style.display=matches?'':'none';
+                    if(matches) visible++;
+                });
+                document.getElementById('pool-overview').textContent = query ? `找到 ${visible} / ${state.names.length} 人` : `已集合 ${state.names.length} 位伙伴`;
+                fitNameLabels(els.poolContainer);
+            }
+
+            function setNameLabel(label, name) {
+                label.title=name;
+                const text=document.createElement('span');
+                text.className='name-text'; text.textContent=name;
+                label.appendChild(text);
+            }
+            function fitNameLabels(root) {
+                root.querySelectorAll('.pool-name,.member-name,.lottery-name').forEach(label => {
+                    const text=label.querySelector('.name-text');
+                    if (!text || !label.clientWidth) return;
+                    const excess=text.scrollWidth-label.clientWidth;
+                    label.classList.toggle('marquee',excess>1);
+                    label.style.setProperty('--name-shift',`${-Math.max(0,excess)}px`);
+                    label.style.setProperty('--name-time',`${Math.max(3,excess/25)}s`);
+                });
+            }
+
+            function fitPool() {
+                const board = els.poolContainer;
+                // 按姓名自然宽度流式排列，不再由最长姓名决定整列宽度。
+                board.style.removeProperty('grid-template-columns');
+                board.style.removeProperty('grid-template-rows');
+                board.style.removeProperty('gap');
+                board.style.setProperty('--pool-font', board.clientWidth >= 700 ? '17px' : '16px');
+                Array.from(board.children).forEach((tag,index) => {
+                    tag.style.setProperty('--chip-tone', `${[255,190,325,155,35,220][index % 6]}`);
+                    tag.style.setProperty('--chip-tilt', `${[-1.4,.8,-.5,1.2,0,-.8,.5][index % 7]}deg`);
+                    tag.style.setProperty('--chip-offset', `${[0,5,1,7,2,4][index % 6]}px`);
+                });
+                fitNameLabels(board);
+            }
+
+            // 移除单个名字
+            function removeName(index) {
+                const name = state.names[index];
+                if (name === undefined) return;
+                putInTrash(name,index);
+                state.names = state.names.filter(member => member !== name);
+                state.groups.forEach(group => { const at=group.indexOf(name); if(at>=0)group.splice(at,1); });
+                draggedMember = null;
+                renderPool();
+                if (state.groups.length) renderGroups();
+            }
+
+            let trashId=0;
+            function putInTrash(name,index) {
+                const group=state.groups.findIndex(g=>g.includes(name));
+                const member=group<0?-1:state.groups[group].indexOf(name);
+                state.trash.push({id:++trashId,name,index,group,member,groupRef:group<0?null:state.groups[group]});
+            }
+            function openTrash() { renderTrash(); document.getElementById('trash-dialog').showModal(); }
+            function renderTrash() {
+                const list=document.getElementById('trash-list'); list.replaceChildren();
+                if(!state.trash.length) { const empty=document.createElement('p'); empty.className='dialog-note';empty.textContent='回收站是空的，删除的人员会出现在这里。';list.appendChild(empty); }
+                [...state.trash].reverse().forEach(item=>{
+                    const row=document.createElement('div');row.className='trash-item';
+                    const name=document.createElement('span');name.textContent=item.name;
+                    const button=document.createElement('button');button.textContent='↶ 恢复';button.onclick=()=>restorePerson(item.id);
+                    row.append(name,button);list.appendChild(row);
+                });
+            }
+            function restorePerson(id,quiet=false) {
+                const item=state.trash.find(x=>x.id===id); if(!item)return;
+                if(!state.names.includes(item.name)) {
+                    state.names.splice(Math.min(item.index,state.names.length),0,item.name);
+                    if(item.group>=0 && state.groups[item.group]===item.groupRef && !state.groups.flat().includes(item.name)) {
+                        state.groups[item.group].splice(Math.min(item.member,state.groups[item.group].length),0,item.name);
+                    }
+                }
+                state.trash=state.trash.filter(x=>x.id!==id);
+                if(!quiet) { renderPool(); if(state.groups.length)renderGroups();renderTrash();showToast(`已恢复 ${item.name}`); }
+            }
+            function restoreAll() {
+                [...state.trash].sort((a,b)=>a.index-b.index).forEach(item=>restorePerson(item.id,true));
+                renderPool();if(state.groups.length)renderGroups();renderTrash();showToast('已恢复全部人员');
+            }
+            function chooseMemberGroup(source,index) {
+                const name=state.groups[source]?.[index];if(name===undefined)return;
+                document.getElementById('move-title').textContent=`将「${name}」移动到`;
+                const options=document.getElementById('move-options');options.replaceChildren();
+                state.groups.forEach((group,target)=>{
+                    if(source===target)return;
+                    const button=document.createElement('button');button.textContent=`第 ${target+1} 组 · ${group.length} 人`;
+                    button.onclick=()=>{moveMember(source,index,target);document.getElementById('move-dialog').close();};options.appendChild(button);
+                });
+                document.getElementById('move-dialog').showModal();
+            }
+
+            // 打乱池子顺序（视觉上的）
+            function shufflePool() {
+                if (state.names.length < 2) return;
+                for (let i = state.names.length - 1; i > 0; i--) {
+                    const j = Math.floor(Math.random() * (i + 1));
+                    [state.names[i], state.names[j]] = [state.names[j], state.names[i]];
+                }
+                renderPool();
+                showToast('名单顺序已打乱');
+            }
+
+            // 设置每组人数
+            function setGroupSize(size) {
+                size = Number(size);
+                if (!Number.isSafeInteger(size) || size < 1) {
+                    showToast('每组人数必须是大于 0 的整数', 'error');
+                    document.getElementById('custom-group-size').value = state.groupSize;
+                    document.getElementById('result-group-size').value = state.groupSize;
+                    return;
+                }
+                state.groupSize = size;
+                document.getElementById('custom-group-size').value = size;
+                document.getElementById('result-group-size').value = size;
+                // 更新按钮样式
+                [2, 3, 4].forEach(s => {
+                    const btn = document.getElementById(`btn-size-${s}`);
+                    if (s === size) {
+                        btn.className = "px-4 py-1.5 rounded-md text-sm font-medium bg-white shadow-sm text-indigo-600 transition-all";
+                    } else {
+                        btn.className = "px-4 py-1.5 rounded-md text-sm font-medium text-slate-500 hover:text-slate-700 transition-all";
+                    }
+                });
+                updatePlan();
+                if (state.groups.length) renderGroups();
+            }
+
+            // 核心算法：Fisher-Yates Shuffle
+            function fisherYatesShuffle(array) {
+                const newArr = [...array];
+                for (let i = newArr.length - 1; i > 0; i--) {
+                    const j = Math.floor(Math.random() * (i + 1));
+                    [newArr[i], newArr[j]] = [newArr[j], newArr[i]];
+                }
+                return newArr;
+            }
+
+            // 生成分组
+            function generateGroups() {
+                if (state.names.length < state.groupSize) {
+                    showToast(`人数不足，至少需要 ${state.groupSize} 人`, 'error');
+                    return;
+                }
+
+                // 隐藏空状态，显示结果容器
+                els.emptyState.classList.add('hidden');
+                els.groupsContainer.classList.remove('hidden');
+                els.groupsContainer.innerHTML = ''; // 清空旧结果
+
+                // 执行洗牌
+                const shuffled = fisherYatesShuffle(state.names);
+                const groups = [];
+                
+                // 切片
+                for (let i = 0; i < shuffled.length; i += state.groupSize) {
+                    groups.push(shuffled.slice(i, i + state.groupSize));
+                }
+
+                // 检查最后一组是否太短（如果用户不允许剩余）
+                const lastGroup = groups[groups.length - 1];
+                const allowRemainder = document.getElementById('allow-remainder').checked;
+                
+                if (!allowRemainder && lastGroup.length < state.groupSize) {
+                    // 简单策略：如果最后一组人太少，提示或者强行合并到前一组？
+                    // 这里为了简单，我们只提示，但依然显示。
+                    // 更好的做法是把最后几个人随机插入前面的组，但这会破坏“均匀”感。
+                    // 暂时保持现状，仅做UI展示。
+                }
+
+                state.groups = groups;
+                document.body.classList.add('results-view');
+                renderGroups(true);
+                window.scrollTo(0, 0);
+                showToast(`成功生成 ${groups.length} 个小组`);
+            }
+
+            let draggedMember = null;
+
+            function moveMember(source, memberIndex, target) {
+                if (source === target || !state.groups[source] || !state.groups[target] ||
+                    !Number.isInteger(memberIndex) || memberIndex < 0 || memberIndex >= state.groups[source].length) return;
+                const [name] = state.groups[source].splice(memberIndex, 1);
+                state.groups[target].push(name);
+                renderGroups(false, { group: target, member: state.groups[target].length - 1 });
+            }
+
+            function renderGroups(animate = false, moved = null) {
+                els.groupsContainer.innerHTML = '';
+                state.groups.forEach((group, index) => {
+                    const card = document.createElement('div');
+                    card.className = 'glass-panel result-card';
+                    card.style.setProperty('--group-accent', ['#4f46e5','#0891b2','#059669','#d97706','#db2777','#7c3aed'][index % 6]);
+                    card.addEventListener('dragover', e => {
+                        if (!draggedMember) return;
+                        e.preventDefault();
+                        e.dataTransfer.dropEffect = 'move';
+                        card.classList.add('drag-target');
+                    });
+                    card.addEventListener('dragleave', e => {
+                        if (!card.contains(e.relatedTarget)) card.classList.remove('drag-target');
+                    });
+                    card.addEventListener('drop', e => {
+                        e.preventDefault();
+                        card.classList.remove('drag-target');
+                        if (!draggedMember) return;
+                        const { source, memberIndex } = draggedMember;
+                        draggedMember = null;
+                        moveMember(source, memberIndex, index);
+                    });
+                    const heading = document.createElement('div');
+                    heading.className = 'group-heading';
+                    const title = document.createElement('h3');
+                    title.textContent = `第 ${index + 1} 组`;
+                    const count = document.createElement('span');
+                    count.className = 'group-count';
+                    count.textContent = `${group.length} / ${state.groupSize}人`;
+                    heading.append(title, count);
+                    const members = document.createElement('div');
+                    members.className = 'result-members';
+                    group.forEach((name, memberIndex) => {
+                        const member = document.createElement('div');
+                        member.className = 'result-member text-slate-700' + (memberIndex >= state.groupSize ? ' over-limit' : '');
+                        const label = document.createElement('span');
+                        label.className = 'member-name';
+                        setNameLabel(label, name);
+                        const deleteButton = document.createElement('button');
+                        deleteButton.type = 'button';
+                        deleteButton.className = 'delete-member';
+                        deleteButton.textContent = '×';
+                        deleteButton.title = `删除 ${name}（同时移出成员池）`;
+                        deleteButton.setAttribute('aria-label', `删除 ${name}，同时移出成员池`);
+                        deleteButton.draggable = false;
+                        deleteButton.addEventListener('mousedown', e => e.stopPropagation());
+                        deleteButton.addEventListener('dragstart', e => { e.preventDefault(); e.stopPropagation(); });
+                        deleteButton.addEventListener('click', e => {
+                            e.stopPropagation();
+                            removeName(state.names.indexOf(name));
+                        });
+                        member.append(label, deleteButton);
+                        member.draggable = true;
+                        label.addEventListener('click',()=>chooseMemberGroup(index,memberIndex));
+                        label.tabIndex=0; label.setAttribute('role','button');
+                        label.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();chooseMemberGroup(index,memberIndex);}});
+                        if (animate) {
+                            member.classList.add('reveal-member');
+                            member.style.setProperty('--reveal-delay', `${Math.min(.8, index * .06 + memberIndex * .08)}s`);
+                        }
+                        if (moved && moved.group === index && moved.member === memberIndex) member.classList.add('moved-member');
+                        member.title = memberIndex >= state.groupSize ? '超出人数上限，可拖动到其他组' : '拖动到其他组';
+                        member.addEventListener('dragstart', e => {
+                            draggedMember = { source: index, memberIndex };
+                            e.dataTransfer.effectAllowed = 'move';
+                            e.dataTransfer.setData('text/plain', name);
+                            member.classList.add('dragging');
+                        });
+                        member.addEventListener('dragend', () => {
+                            draggedMember = null;
+                            member.classList.remove('dragging');
+                            els.groupsContainer.querySelectorAll('.drag-target').forEach(el => el.classList.remove('drag-target'));
+                        });
+                        members.appendChild(member);
+                    });
+                    card.append(heading, members);
+                    els.groupsContainer.appendChild(card);
+                });
+                const total = state.groups.reduce((sum, group) => sum + group.length, 0);
+                document.getElementById('result-summary').textContent = `${total} 位成员 · ${state.groups.length} 个小组 · 拖动姓名换组，超出上限的姓名标红`;
+                fitResults();
+                document.getElementById('resume-results').disabled = state.names.length === 0;
+            }
+
+            function chooseResultLayout(width, height, groups) {
+                const count=groups.length;
+                const gap=12, padding=width<650?16:32;
+                const maxMembers=Math.max(1,...groups.map(group=>group.length));
+                // 普通姓名完整显示；特别长的备注姓名沿用向左滚动。
+                const nameUnits=Math.max(4,...groups.flat().map(name=>Math.min(6,Array.from(name).reduce((n,c)=>n+(/[\x00-\x7f]/.test(c)?.55:1),0))));
+                let best=null;
+                for(let cols=1;cols<=count;cols++) {
+                    const rows=Math.ceil(count/cols);
+                    const cellWidth=(width-gap*(cols-1))/cols;
+                    const cellHeight=(height-gap*(rows-1))/rows;
+                    if(cellWidth<105 || cellHeight<70) continue;
+                    const font=Math.min(34,(cellWidth-padding-24)/nameUnits,(cellHeight-padding-48-11*maxMembers)/(1.35*maxMembers));
+                    if(font<8) continue;
+                    const occupancy=count/(cols*rows);
+                    const score=font*(.88+.12*occupancy);
+                    if(!best || score>best.score+.01) best={cols,rows,font,score};
+                }
+                if(!best) {
+                    const cols=Math.max(1,Math.min(count,Math.round(Math.sqrt(count*width/Math.max(1,height)))));
+                    best={cols,rows:Math.ceil(count/cols),font:10};
+                }
+                return best;
+            }
+
+            function fitResults() {
+                if (!document.body.classList.contains('results-view')) return;
+                const board=els.groupsContainer;
+                if(!state.groups.length || !board.clientWidth || !board.clientHeight) return;
+                const best=chooseResultLayout(board.clientWidth,board.clientHeight,state.groups);
+                board.style.gridTemplateColumns=`repeat(${best.cols},minmax(0,1fr))`;
+                board.style.gridTemplateRows=`repeat(${best.rows},minmax(0,1fr))`;
+                board.style.setProperty('--board-gap','12px');
+                board.style.setProperty('--board-font',`${Math.floor(best.font)}px`);
+                // 按实际行高校验，避免浏览器字体差异造成溢出。
+                const cards=Array.from(board.children);
+                let font=Math.floor(best.font);
+                while(font>10 && cards.some(card=>card.scrollHeight>card.clientHeight+1)) {
+                    font--; board.style.setProperty('--board-font',`${font}px`);
+                }
+                fitNameLabels(board);
+            }
+
+            function enterGrouping() {
+                if (state.groups.length) showResults();
+                else generateGroups();
+            }
+
+            function showResults() {
+                if (!state.groups.length) { showToast('请先生成分组结果', 'error'); return; }
+                document.body.classList.add('results-view');
+                els.emptyState.classList.add('hidden');
+                els.groupsContainer.classList.remove('hidden');
+                renderGroups();
+            }
+
+            function editNames() {
+                document.body.classList.remove('results-view');
+                fitPool();
+            }
+
+            function setTheme(theme) {
+                const themes={violet:['#6755db','#f1edff','#f7f6fc'],mint:['#21856e','#e7f5ee','#f3f9f6'],rose:['#cc476f','#fff0f4','#fcf6f8']};
+                const palette=themes[theme]; if(!palette)return;
+                ['--ui-accent','--ui-soft','--ui-page'].forEach((key,i)=>document.documentElement.style.setProperty(key,palette[i]));
+                document.querySelectorAll('[data-theme]').forEach(button=>button.setAttribute('aria-pressed',String(button.dataset.theme===theme)));
+            }
+            function animationProfile() {
+                return ({fast:{tick:50,reveal:250,member:.32},normal:{tick:75,reveal:400,member:.55},slow:{tick:120,reveal:650,member:.85}})[document.getElementById('anim-speed').value] || {tick:75,reveal:400,member:.55};
+            }
+            function applyAnimationSpeed() {
+                const speed=animationProfile();
+                document.documentElement.style.setProperty('--member-duration',`${speed.member}s`);
+                document.documentElement.style.setProperty('--winner-duration',`${speed.reveal*.8}ms`);
+                document.documentElement.style.setProperty('--preview-duration',`${speed.tick}ms`);
+                if(lottery.phase==='running') {clearInterval(lottery.timer);lottery.timer=setInterval(drawPreview,speed.tick);}
+            }
+            function syncFullscreenButtons() {
+                const active=!!document.fullscreenElement;
+                document.querySelectorAll('[data-fullscreen]').forEach(button=>{
+                    button.textContent=active?'⛶ 退出全屏':'⛶ 全屏显示';
+                    button.setAttribute('aria-label',active?'退出全屏':'进入全屏');
+                    button.setAttribute('aria-pressed',String(active));
+                });
+            }
+            document.addEventListener('fullscreenchange',syncFullscreenButtons);
+
+            async function toggleFullscreen() {
+                try {
+                    if (document.fullscreenElement) await document.exitFullscreen();
+                    else await document.documentElement.requestFullscreen();
+                } catch { showToast('浏览器未允许全屏，可按 F11 全屏显示', 'error'); }
+            }
+
+            window.addEventListener('resize', () => { fitResults(); fitPool(); fitNameLabels(lotteryEl('lottery-display')); });
+            if (document.fonts) document.fonts.ready.then(() => { fitResults(); fitPool(); });
+            document.addEventListener('fullscreenchange', fitResults);
+
+            // 切换设置面板
+            function toggleSettings() {
+                const modal = els.settingsModal;
+                const content = els.settingsContent;
+                
+                if (modal.classList.contains('hidden')) {
+                    modal.classList.remove('hidden');
+                    // 强制重绘以触发transition
+                    setTimeout(() => {
+                        modal.classList.remove('opacity-0');
+                        content.classList.remove('scale-95');
+                        content.classList.add('scale-100');
+                    }, 10);
+                } else {
+                    modal.classList.add('opacity-0');
+                    content.classList.remove('scale-100');
+                    content.classList.add('scale-95');
+                    setTimeout(() => {
+                        modal.classList.add('hidden');
+                    }, 300);
+                }
+            }
+
+            // 导出结果
+            function exportResults() {
+                if (els.groupsContainer.children.length === 0) {
+                    showToast('没有可导出的结果', 'error');
+                    return;
+                }
+                
+                let text = "=== 随机分组结果 ===\n";
+                const cards = els.groupsContainer.querySelectorAll('.result-card');
+                cards.forEach((card, idx) => {
+                    const title = card.querySelector('h3').innerText;
+                    const members = Array.from(card.querySelectorAll('.member-name')).map(m => m.innerText).join(', ');
+                    text += `\n【${title}】: ${members}\n`;
+                });
+
+                // 创建下载链接
+                const blob = new Blob([text], { type: 'text/plain;charset=utf-8' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `分组结果_${new Date().toLocaleDateString()}.txt`;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+                
+                showToast('结果已导出为TXT文件');
+                if (!els.settingsModal.classList.contains('hidden')) toggleSettings();
+            }
+
+            // Toast 提示
+            function showToast(msg, type = 'success') {
+                els.toastMsg.textContent = msg;
+                const icon = els.toast.querySelector('[aria-hidden]');
+                
+                if (type === 'error') {
+                    icon.className = 'text-red-400'; icon.textContent = '!';
+                } else {
+                    icon.className = 'text-green-400'; icon.textContent = '✓';
+                }
+
+                els.toast.classList.remove('translate-y-20', 'opacity-0');
+                
+                setTimeout(() => {
+                    els.toast.classList.add('translate-y-20', 'opacity-0');
+                }, 3000);
+            }
+
+            // 抽奖与分组共用人员池；历史按轮次保存，独立于分组结果。
+            const lottery = { phase:'idle', rounds:[], eligible:[], timer:null, revealTimer:null, winners:[], revealIndex:0 };
+            const lotteryEl = id => document.getElementById(id);
+            function lotteryCandidates() {
+                const won = new Set(lottery.rounds.flat());
+                return [...new Set(state.names)].filter(name => !lotteryEl('lottery-filter').checked || !won.has(name));
+            }
+            function updateLottery() {
+                const candidates = lotteryCandidates();
+                const won = new Set(lottery.rounds.flat());
+                lotteryEl('lottery-meta').textContent = `人员池 ${state.names.length} 人 · 本轮可抽 ${candidates.length} 人 · 已中奖 ${won.size} 人`;
+                const busy = lottery.phase !== 'idle';
+                ['lottery-count','lottery-filter','lottery-reset'].forEach(id => lotteryEl(id).disabled = busy);
+                lotteryEl('lottery-start').disabled = busy || candidates.length === 0;
+                lotteryEl('lottery-stop').disabled = lottery.phase !== 'running';
+                const records = lotteryEl('lottery-records');
+                records.replaceChildren();
+                const title = document.createElement('span');
+                title.textContent = lottery.rounds.length ? `中奖记录 · ${lottery.rounds.length} 轮` : '中奖记录 · 好运尚未揭晓';
+                records.appendChild(title);
+                lottery.rounds.forEach((round, ri) => round.filter((name, wi) => lottery.phase !== 'revealing' || ri < lottery.rounds.length - 1 || wi < lottery.revealIndex).forEach(name => {
+                    const chip=document.createElement('span'); chip.className='winner-chip'; chip.textContent=`第 ${ri+1} 轮 · ${name}`; records.appendChild(chip);
+                }));
+            }
+            function openLottery() {
+                lotteryEl('lottery-screen').hidden=false;
+                document.body.style.overflow='hidden';
+                updateLottery();
+            }
+            function closeLottery() {
+                if (lottery.phase === 'running') {
+                    clearInterval(lottery.timer); lottery.timer=null; lottery.phase='idle';
+                    lotteryEl('lottery-display').replaceChildren();
+                    lotteryEl('lottery-status').textContent='本轮已取消，未产生中奖记录';
+                } else if (lottery.phase === 'revealing') {
+                    showToast('正在揭晓，请等待本轮中奖人员全部显示', 'error'); return;
+                }
+                lotteryEl('lottery-screen').hidden=true;
+                document.body.style.overflow='';
+                editNames();
+            }
+            function drawPreview() {
+                const sample=fisherYatesShuffle(lottery.eligible).slice(0, Math.ceil(lottery.eligible.length / 3));
+                const display=lotteryEl('lottery-display'); display.replaceChildren();
+                const spotlight=Math.floor(Math.random()*sample.length);
+                sample.forEach((name,i) => {
+                    const card=document.createElement('div'); card.className='lottery-person preview'+(i===spotlight?' spotlight':'');
+                    const label=document.createElement('span'); label.className='lottery-name'; setNameLabel(label,name);
+                    card.appendChild(label); display.appendChild(card);
+                });
+                fitNameLabels(display);
+            }
+            function startLottery() {
+                if (lottery.phase !== 'idle') return;
+                const candidates=lotteryCandidates();
+                const count=Number(lotteryEl('lottery-count').value);
+                if (!Number.isSafeInteger(count) || count < 1) { showToast('中奖人数必须是大于 0 的整数', 'error'); return; }
+                if (count > candidates.length) {showToast(`本轮只有 ${candidates.length} 人可抽，请减少中奖人数或关闭过滤`, 'error'); return;}
+                lottery.eligible=candidates; lottery.count=count; lottery.phase='running';
+                lotteryEl('lottery-status').textContent=`好运滚动中 · 每次展示 ${Math.ceil(candidates.length / 3)} / ${candidates.length} 位候选人 · 点击暂停揭晓`;
+                updateLottery(); drawPreview();
+                lottery.timer=setInterval(drawPreview, animationProfile().tick);
+            }
+            function stopLottery() {
+                if (lottery.phase !== 'running') return;
+                clearInterval(lottery.timer); lottery.timer=null;
+                lottery.phase='revealing';
+                // 从全部候选人中抽取，滚动展示的子集不会影响中奖机会。
+                lottery.winners=fisherYatesShuffle(lottery.eligible).slice(0,lottery.count);
+                lottery.revealIndex=0;
+                lottery.rounds.push([...lottery.winners]);
+                lotteryEl('lottery-display').replaceChildren();
+                updateLottery(); revealNextWinner();
+            }
+            function revealNextWinner() {
+                const i=lottery.revealIndex;
+                if (i >= lottery.winners.length) {
+                    lottery.phase='idle'; lottery.revealTimer=null;
+                    lotteryEl('lottery-status').textContent=`恭喜本轮 ${lottery.winners.length} 位幸运伙伴！可开始下一轮`;
+                    updateLottery(); return;
+                }
+                const card=document.createElement('div'); card.className='lottery-person winner';
+                const rank=document.createElement('span'); rank.className='winner-rank'; rank.textContent=`第 ${i+1} 位幸运伙伴`;
+                const slot=document.createElement('div'); slot.className='winner-slot';
+                const track=document.createElement('div'); track.className='winner-track';
+                const reel=fisherYatesShuffle(lottery.eligible).slice(0,4);
+                while(reel.length<4) reel.push(lottery.eligible[reel.length % lottery.eligible.length]);
+                reel.push(lottery.winners[i]);
+                reel.forEach(name => {const label=document.createElement('span'); label.className='lottery-name';setNameLabel(label,name);track.appendChild(label);});
+                slot.appendChild(track); card.append(rank,slot); lotteryEl('lottery-display').appendChild(card);
+                lotteryEl('lottery-status').textContent=`正在滑动揭晓 · ${i+1} / ${lottery.winners.length}`;
+                lottery.revealTimer=setTimeout(() => {
+                    // 停在中奖者姓名，再进入下一位；记录不会提前剧透。
+                    const label=document.createElement('span'); label.className='lottery-name'; setNameLabel(label,lottery.winners[i]);
+                    slot.replaceChildren(label);
+                    lottery.revealIndex++;
+                    updateLottery(); fitNameLabels(card);
+                    revealNextWinner();
+                },animationProfile().reveal);
+            }
+            function resetLottery() {
+                if (lottery.phase !== 'idle' || !lottery.rounds.length) return;
+                if (!confirm('确定清空全部中奖记录吗？清空后所有人员可重新参与。')) return;
+                lottery.rounds=[]; lottery.winners=[];
+                lotteryEl('lottery-display').replaceChildren();
+                lotteryEl('lottery-status').textContent='中奖记录已清空，所有伙伴重新获得机会';
+                updateLottery();
+            }
+
+            // 暴露公共方法
+            return {
+                init, clearInput, filterPool, openTrash, restoreAll,
+                addNames,
+                clearNames,
+                loadDemoData,
+                removeName,
+                shufflePool,
+                setGroupSize,
+                generateGroups,
+                toggleSettings,
+                exportResults,
+                editNames, showResults, enterGrouping,
+                toggleFullscreen, setTheme, applyAnimationSpeed,
+                openLottery, closeLottery, updateLottery, startLottery, stopLottery, resetLottery
+            };
+        })();
+
+        // 启动应用
+        document.addEventListener('DOMContentLoaded', app.init);
+    </script>
+</body>
+</html>
